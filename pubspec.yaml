@@ -1,0 +1,41 @@
+name: unfollowerscurrent
+description: VERDICT - Professional Follower Analyzer.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+  webview_flutter: ^4.7.0
+  shared_preferences: ^2.2.2
+  http: ^1.6.0
+  url_launcher: ^6.2.4
+  google_mobile_ads: ^7.0.0 # <-- İşte bu eksikti, ekledim.
+  firebase_core: ^2.27.0
+  firebase_remote_config: ^4.3.8
+  firebase_analytics: ^10.8.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  # Logoyu otomatik her boyuta çeviren paket
+  flutter_launcher_icons: ^0.13.1
+
+# Logo Ayarları
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/icon.png"
+  adaptive_icon_background: "#000000"
+  adaptive_icon_foreground: "assets/icon.png"
+
+flutter:
+  uses-material-design: true
+  # Logoyu varlık olarak tanımlıyoruz
+  assets:
+    - assets/icon.png
