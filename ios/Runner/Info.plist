@@ -5,6 +5,14 @@
     <key>GADApplicationIdentifier</key>
     <string>ca-app-pub-4966303174577377~9121449451</string>
 
+    <key>SKAdNetworkItems</key>
+    <array>
+        <dict>
+            <key>SKAdNetworkIdentifier</key>
+            <string>cstr6suwn9.skadnetwork</string>
+        </dict>
+    </array>
+
     <key>LSApplicationQueriesSchemes</key>
     <array>
         <string>instagram</string>
@@ -44,15 +52,6 @@
     <key>UISupportedInterfaceOrientations</key>
     <array>
         <string>UIInterfaceOrientationPortrait</string>
-        <string>UIInterfaceOrientationLandscapeLeft</string>
-        <string>UIInterfaceOrientationLandscapeRight</string>
-    </array>
-    <key>UISupportedInterfaceOrientations~ipad</key>
-    <array>
-        <string>UIInterfaceOrientationPortrait</string>
-        <string>UIInterfaceOrientationPortraitUpsideDown</string>
-        <string>UIInterfaceOrientationLandscapeLeft</string>
-        <string>UIInterfaceOrientationLandscapeRight</string>
     </array>
     <key>CADisableMinimumFrameDurationOnPhone</key>
     <true/>
@@ -64,6 +63,8 @@
         <key>NSAllowsArbitraryLoads</key>
         <true/>
         <key>NSAllowsArbitraryLoadsInWebContent</key>
+        <true/>
+        <key>NSAllowsLocalNetworking</key>
         <true/>
     </dict>
     <key>io.flutter.embedded_views_preview</key>
