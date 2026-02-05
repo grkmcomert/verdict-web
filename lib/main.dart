@@ -506,6 +506,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       'left_followers': 'Takibi Bırakanlar',
       'legal_warning': 'Yasal Uyarı',
       'read_and_agree': 'OKUDUM VE KABUL EDİYORUM',
+      'withdraw_consent': 'Rızayı Geri Al',
       'no_data': 'Veri yok',
       'new_badge': 'YENİ',
       'login_title': 'Giriş Yap',
@@ -573,6 +574,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       'left_followers': 'Unfollowers',
       'legal_warning': 'Legal Disclaimer',
       'read_and_agree': 'I HAVE READ AND AGREE',
+      'withdraw_consent': 'Withdraw Consent',
       'no_data': 'No data',
       'new_badge': 'NEW',
       'login_title': 'Login',
@@ -655,16 +657,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _tryAutoLogin();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkUserAgreement();
-      _waitForAdsAndLoad(); 
       _checkRatingDialog();
+      _maybeLoadBannerAfterConsent();
     });
   }
 
-  Future<void> _waitForAdsAndLoad() async {
-     await MobileAds.instance.initialize(); 
-     if (mounted) {
-       _loadBannerAd(); 
-     }
+  Future<void> _maybeLoadBannerAfterConsent() async {
+    for (int i = 0; i < 10; i++) {
+      if (!mounted) return;
+      try {
+        if (await ConsentInformation.instance.canRequestAds()) {
+          _loadBannerAd();
+          return;
+        }
+      } catch (_) {}
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
+  }
+
+  bool _shouldUseNonPersonalizedAds() {
+    try {
+      final status = ConsentInformation.instance.getConsentStatus();
+      return status != ConsentStatus.obtained &&
+          status != ConsentStatus.notRequired;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<void> _checkRatingDialog() async {
@@ -762,9 +780,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (kDebugMode) print('Adaptive size error: $e');
     }
 
+    final bool useNpa = _shouldUseNonPersonalizedAds();
     _bannerAd = BannerAd(
       adUnitId: adUnit,
-      request: const AdRequest(),
+      request: AdRequest(nonPersonalizedAds: useNpa),
       size: adSize,
       listener: BannerAdListener(
         onAdLoaded: (ad) {
@@ -814,9 +833,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     RewardedAd? tempAd;
 
+    final bool useNpa = _shouldUseNonPersonalizedAds();
     RewardedAd.load(
       adUnitId: adUnit,
-      request: const AdRequest(),
+      request: AdRequest(nonPersonalizedAds: useNpa),
       rewardedAdLoadCallback: RewardedAdLoadCallback(
         onAdLoaded: (RewardedAd ad) {
           tempAd = ad;
@@ -1072,6 +1092,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
        debugPrint("Link açılamadı");
     }
+  }
+
+  Future<void> _revokeConsentAndShowForm() async {
+    try {
+      await ConsentInformation.instance.reset();
+    } catch (_) {}
+    final params = ConsentRequestParameters();
+    ConsentInformation.instance.requestConsentInfoUpdate(
+      params,
+      () async {
+        if (await ConsentInformation.instance.isConsentFormAvailable()) {
+          ConsentForm.loadAndShowConsentFormIfRequired((FormError? _) {});
+        }
+      },
+      (FormError _) {},
+    );
   }
 
   @override
@@ -1939,44 +1975,55 @@ class _DashboardScreenState extends State<DashboardScreen> {
         const Divider(height: 30),
       ])),
       actions: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Flexible(
-              flex: 2,
-              child: TextButton(
-                onPressed: _launchPrivacyPolicyURL,
-                child: Text(
-                  _lang == 'tr' ? "Gizlilik Politikası" : "Privacy Policy",
-                  style: TextStyle(
-                      color: isDarkMode ? Colors.white70 : Colors.blueGrey,
-                      fontSize: 11, 
-                      fontWeight: FontWeight.bold),
-                  overflow: TextOverflow.ellipsis,
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              runSpacing: 4,
+              children: [
+                TextButton(
+                  onPressed: _launchPrivacyPolicyURL,
+                  child: Text(
+                    _lang == 'tr' ? "Gizlilik Politikası" : "Privacy Policy",
+                    style: TextStyle(
+                        color: isDarkMode ? Colors.white70 : Colors.blueGrey,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-              ),
+                if (!isInitial)
+                  TextButton(
+                    onPressed: _revokeConsentAndShowForm,
+                    child: Text(
+                      _t('withdraw_consent'),
+                      style: TextStyle(
+                          color: isDarkMode ? Colors.white70 : Colors.blueGrey,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold),
+                    ),
+                  ),
+              ],
             ),
-            const SizedBox(width: 4),
-            Flexible(
-              flex: 3,
-              child: isInitial
-                  ? ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 8), 
-                      ),
-                      onPressed: () {
-                        prefs?.setBool('is_terms_accepted', true);
-                        Navigator.pop(context);
-                      },
-                      child: Text(
-                        _t('read_and_agree'),
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(fontSize: 11), 
-                      ))
-                  : TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: Text(_lang == 'tr' ? "KAPAT" : "CLOSE")),
-            )
+            const SizedBox(height: 4),
+            isInitial
+                ? ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                    onPressed: () {
+                      prefs?.setBool('is_terms_accepted', true);
+                      Navigator.pop(context);
+                    },
+                    child: Text(
+                      _t('read_and_agree'),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 11),
+                    ))
+                : TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(_lang == 'tr' ? "KAPAT" : "CLOSE")),
           ],
         )
       ],
