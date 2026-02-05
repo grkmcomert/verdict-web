@@ -24,10 +24,8 @@ final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
 
 void main() {
-  // Hataları yakalamak için runZonedGuarded kullanıyoruz
   runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
-    // Firebase'i en başta, uygulama ayağa kalkmadan garantiye alıyoruz
     await Firebase.initializeApp();
     runApp(const RootApp());
   }, (error, stack) {
@@ -44,7 +42,7 @@ class RootApp extends StatefulWidget {
 
 class _RootAppState extends State<RootApp> {
   bool _isLoading = true;
-  bool _showRealApp = false; // Varsayılan: Safe Mode (Köstebek kapalı)
+  bool _showRealApp = false;
   bool _isAppEnabled = true;
   String _debugError = "";
 
@@ -54,23 +52,19 @@ class _RootAppState extends State<RootApp> {
     _initializeApp();
   }
 
-  // Tüm başlatma işlemlerini atomik ve sıralı yapıyoruz
   Future<void> _initializeApp() async {
-    // 1. Timezone Başlatma
     try {
       tz.initializeTimeZones();
     } catch (e) {
       debugPrint("Timezone hatası: $e");
     }
 
-    // 2. Bildirimleri Başlatma (Hata alırsa YUT ve DEVAM ET)
     try {
       await _initNotifications();
     } catch (e) {
-      debugPrint("Bildirim başlatma hatası (İkon eksik olabilir): $e");
+      debugPrint("Bildirim başlatma hatası: $e");
     }
 
-    // 3. Remote Config (En Kritik Kısım)
     try {
       await _fetchConfig();
     } catch (e) {
@@ -78,14 +72,12 @@ class _RootAppState extends State<RootApp> {
       _debugError = "Bağlantı Hatası: $e";
     }
 
-    // 4. Diğerleri
     try {
       _initGoogleMobileAds();
       _checkAppLaunchForRating();
       _scheduleDailyNotification();
     } catch (_) {}
 
-    // 5. Yükleme Ekranını Kapat
     if (mounted) {
       setState(() {
         _isLoading = false;
@@ -112,11 +104,9 @@ class _RootAppState extends State<RootApp> {
     await flutterLocalNotificationsPlugin.initialize(initializationSettings);
   }
 
-  // --- BİLDİRİM ZAMANLAMA ---
   Future<void> _scheduleDailyNotification() async {
     try {
       await flutterLocalNotificationsPlugin.cancelAll();
-
       final String locale = Platform.localeName;
       bool isTr = locale.toLowerCase().startsWith('tr');
 
@@ -277,10 +267,14 @@ class MaintenanceApp extends StatelessWidget {
   }
 }
 
+// --- GÜNCELLENMİŞ LOADER (YÜZDELİK GÖSTERGELİ) ---
 class ModernLoader extends StatefulWidget {
   final String? text;
   final bool isDark;
-  const ModernLoader({super.key, this.text, this.isDark = false});
+  final double? progress; // 0.0 ile 1.0 arasında değer
+
+  const ModernLoader({super.key, this.text, this.isDark = false, this.progress});
+  
   @override
   State<ModernLoader> createState() => _ModernLoaderState();
 }
@@ -288,6 +282,7 @@ class ModernLoader extends StatefulWidget {
 class _ModernLoaderState extends State<ModernLoader>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
+  
   @override
   void initState() {
     super.initState();
@@ -306,25 +301,49 @@ class _ModernLoaderState extends State<ModernLoader>
   Widget build(BuildContext context) {
     Color color = widget.isDark ? Colors.white : Colors.blueGrey;
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          SizedBox(
-              width: 40,
-              height: 40,
-              child: CircularProgressIndicator(
-                  strokeWidth: 3,
-                  valueColor: AlwaysStoppedAnimation<Color>(color))),
-          if (widget.text != null) ...[
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 40),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox(
+                width: 40,
+                height: 40,
+                child: CircularProgressIndicator(
+                    strokeWidth: 3,
+                    valueColor: AlwaysStoppedAnimation<Color>(color))),
             const SizedBox(height: 20),
-            Text(widget.text!,
+            if (widget.text != null)
+              Text(widget.text!,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      color: color,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1.0,
+                      fontSize: 12)),
+            
+            // İLERLEME ÇUBUĞU VE YÜZDE
+            if (widget.progress != null) ...[
+              const SizedBox(height: 15),
+              LinearProgressIndicator(
+                value: widget.progress,
+                backgroundColor: color.withOpacity(0.2),
+                valueColor: AlwaysStoppedAnimation<Color>(widget.isDark ? Colors.blueAccent : Colors.blue),
+                minHeight: 6,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                "%${(widget.progress! * 100).toInt()}",
                 style: TextStyle(
-                    color: color,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1.0,
-                    fontSize: 12)),
-          ]
-        ],
+                  color: color.withOpacity(0.8),
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold
+                ),
+              )
+            ]
+          ],
+        ),
       ),
     );
   }
@@ -355,21 +374,7 @@ class BioPlannerScreen extends StatefulWidget {
 
 class _BioPlannerScreenState extends State<BioPlannerScreen> {
   final TextEditingController _bioCtrl = TextEditingController();
-  int _charCount = 0;
-  final List<String> _popularHashtags = [
-    "#love", "#instagood", "#photooftheday", "#fashion", "#beautiful"
-  ];
   final List<String> _aiTemplates = ["Creating my own sunshine. ☀️"];
-
-  @override
-  void initState() {
-    super.initState();
-    _bioCtrl.addListener(() {
-      setState(() {
-        _charCount = _bioCtrl.text.length;
-      });
-    });
-  }
 
   void _generateAiCaption() {
     _bioCtrl.text = _aiTemplates[0];
@@ -443,6 +448,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       leftCount = '?',
       newCount = '?';
   bool isLoggedIn = false, isProcessing = false, isDarkMode = false;
+  double _progressValue = 0.0; // İlerleme değeri
+  
   String currentUsername = "";
   String? savedCookie, savedUserId, savedUserAgent;
 
@@ -459,9 +466,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String? _currentAdUnit;
   bool _adsHidden = false;
 
-  RewardedAd? _rewardedAd;
-  bool _isRewardedLoading = false;
   bool _justWatchedReward = false;
+  bool _isRewardedLoading = false;
 
   static const bool _forceTestAds = false;
 
@@ -648,7 +654,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkUserAgreement();
       _loadBannerAd();
-      _checkRatingDialog(); // Puanlama diyaloğunu kontrol et
+      _checkRatingDialog();
     });
   }
 
@@ -717,14 +723,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return;
     }
 
-    // Android ve iOS için ayrı ID'ler burada ayarlandı.
     final String adUnit = useTestAds
         ? (Platform.isAndroid
             ? 'ca-app-pub-3940256099942544/6300978111'
             : 'ca-app-pub-3940256099942544/2934735716')
         : (Platform.isAndroid
-            ? 'ca-app-pub-4966303174577377/1748084831' // Yeni Android Banner ID
-            : 'ca-app-pub-4966303174577377/3471529345'); // Mevcut iOS Banner ID
+            ? 'ca-app-pub-4966303174577377/1748084831'
+            : 'ca-app-pub-4966303174577377/3471529345');
 
     _currentAdUnit = adUnit;
 
@@ -754,6 +759,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       size: adSize,
       listener: BannerAdListener(
         onAdLoaded: (ad) {
+          debugPrint("Banner Ad Loaded! Size: ${ad.responseInfo}");
           if (mounted)
             setState(() {
               _isAdLoaded = true;
@@ -761,6 +767,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             });
         },
         onAdFailedToLoad: (ad, err) {
+          debugPrint("Banner Ad Failed: $err");
           ad.dispose();
           if (mounted)
             setState(() {
@@ -786,14 +793,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     final bool useTestAds = _forceTestAds;
     
-    // Android ve iOS için ayrı ID'ler burada ayarlandı.
     final String adUnit = useTestAds
         ? (Platform.isAndroid
             ? 'ca-app-pub-3940256099942544/5224354917'
             : 'ca-app-pub-3940256099942544/1712485313')
         : (Platform.isAndroid
-            ? 'ca-app-pub-4966303174577377/3360257825' // Yeni Android Ödüllü ID
-            : 'ca-app-pub-4966303174577377/1076573947'); // Mevcut iOS Ödüllü ID
+            ? 'ca-app-pub-4966303174577377/3360257825'
+            : 'ca-app-pub-4966303174577377/1076573947');
 
     final Completer<Map<String, dynamic>> c = Completer<Map<String, dynamic>>();
 
@@ -1052,7 +1058,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
   
-  // YENİ EKLENEN: Gizlilik Politikasını Açma Fonksiyonu
   Future<void> _launchPrivacyPolicyURL() async {
     final Uri url = Uri.parse('https://sites.google.com/view/verdict-privacy/'); 
     if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
@@ -1067,8 +1072,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     Color cardColor = isDarkMode ? const Color(0xFF121212) : Colors.white;
     Color textColor = isDarkMode ? Colors.white : Colors.black87;
     Color primaryColor = isDarkMode ? Colors.blueAccent : Colors.blueGrey;
-    
-    // DÜZELTME: Karanlık modda header ikon ve yazılar beyaz
     Color headerColor = isDarkMode ? Colors.white : primaryColor;
 
     return Scaffold(
@@ -1094,17 +1097,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       isDarkMode
                                           ? Icons.light_mode
                                           : Icons.dark_mode,
-                                      color: headerColor), // DÜZELTİLDİ
+                                      color: headerColor), 
                                   onPressed: _toggleDarkMode),
                               IconButton(
                                 icon: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Icon(Icons.language, color: headerColor), // DÜZELTİLDİ
+                                      Icon(Icons.language, color: headerColor), 
                                       const SizedBox(width: 6),
                                       Text(_lang.toUpperCase(),
                                           style: TextStyle(
-                                              color: headerColor, // DÜZELTİLDİ
+                                              color: headerColor, 
                                               fontWeight: FontWeight.bold))
                                     ]),
                                 onPressed: _toggleLanguage,
@@ -1117,13 +1120,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 style: TextStyle(
                                     fontWeight: FontWeight.w900,
                                     fontSize: 26,
-                                    color: headerColor, // DÜZELTİLDİ
+                                    color: headerColor, 
                                     letterSpacing: 3.0)),
                             Text(_t('tagline'),
                                 style: TextStyle(
                                     fontWeight: FontWeight.w500,
                                     fontSize: 8,
-                                    color: headerColor.withOpacity(0.6))), // DÜZELTİLDİ
+                                    color: headerColor.withOpacity(0.6))), 
                           ],
                         ),
                         Align(
@@ -1135,6 +1138,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ],
                     ),
                     const SizedBox(height: 20),
+                    
+                    // --- REKLAM ALANI DÜZELTİLDİ ---
                     Container(
                       width: double.infinity,
                       decoration: BoxDecoration(
@@ -1156,21 +1161,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     fontSize: 10)),
                           )
                         else if (_isAdLoaded && _bannerAd != null)
-                          Align(
-                            alignment: Alignment.center,
-                            child: LayoutBuilder(builder: (context, constraints) {
-                              final double displayWidth = min(
-                                  constraints.maxWidth,
-                                  _bannerAd!.size.width.toDouble());
-                              final double displayHeight =
-                                  _bannerAd!.size.height.toDouble() *
-                                      (displayWidth /
-                                          _bannerAd!.size.width.toDouble());
-                              return SizedBox(
-                                  width: displayWidth,
-                                  height: displayHeight,
-                                  child: AdWidget(ad: _bannerAd!));
-                            }),
+                          // LayoutBuilder KALDIRILDI, doğrudan SizedBox ve ad size
+                          SizedBox(
+                            width: _bannerAd!.size.width.toDouble(),
+                            height: _bannerAd!.size.height.toDouble(),
+                            child: AdWidget(ad: _bannerAd!),
                           )
                         else if (_bannerAdError != null)
                           Padding(
@@ -1182,7 +1177,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     fontWeight: FontWeight.bold,
                                     fontSize: 10)),
                           )
-                        // "Analiz Bekleniyor..." yazan else bloğu tamamen kaldırıldı.
+                        else
+                          // Yükleniyor durumu için boşluk veya spinner
+                          const SizedBox(height: 50, child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))))
                       ]),
                     ),
                   ],
@@ -1210,8 +1207,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         Container(
                           height: 250,
                           alignment: Alignment.center,
+                          // PROGRESS DEĞERİ EKLENDİ
                           child: ModernLoader(
-                              text: _t('fetching_data'), isDark: isDarkMode),
+                              text: _t('fetching_data'), 
+                              isDark: isDarkMode,
+                              progress: _progressValue,
+                          ),
                         )
                       else
                         _buildGrid(cardColor, textColor),
@@ -1496,31 +1497,63 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
     } catch (_) {}
 
-    setState(() => isProcessing = true);
+    setState(() {
+      isProcessing = true;
+      _progressValue = 0.05; // Başlangıç %5
+    });
 
     try {
       Map<String, dynamic>? info =
           await _fetchUserInfoRaw(savedUserId!, savedCookie!, uaToUse);
+      
+      setState(() { _progressValue = 0.10; }); // Profil alındı %10
+
       int tFollowers = info?['follower_count'] ?? 0;
       int tFollowing = info?['following_count'] ?? 0;
 
       Map<String, String> nFollowers = {};
+      
+      // Takipçileri çek (Progress callback ile)
       await _fetchPagedData(
           userId: savedUserId!,
           cookie: savedCookie!,
           ua: uaToUse,
           type: 'followers',
           totalExpected: tFollowers,
-          targetMap: nFollowers);
+          targetMap: nFollowers,
+          onProgress: (fetched) {
+             if (tFollowers > 0) {
+                 // 0.10'dan 0.55'e kadar range
+                 double percent = 0.10 + ( (fetched / tFollowers) * 0.45 );
+                 if (percent > 0.55) percent = 0.55;
+                 setState(() => _progressValue = percent);
+             }
+          }
+      );
+      
+      setState(() => _progressValue = 0.55); // Takipçi bitti
 
       Map<String, String> nFollowing = {};
+      
+      // Takip edilenleri çek
       await _fetchPagedData(
           userId: savedUserId!,
           cookie: savedCookie!,
           ua: uaToUse,
           type: 'following',
           totalExpected: tFollowing,
-          targetMap: nFollowing);
+          targetMap: nFollowing,
+          onProgress: (fetched) {
+             if (tFollowing > 0) {
+                 // 0.55'den 0.95'e kadar range
+                 double percent = 0.55 + ( (fetched / tFollowing) * 0.40 );
+                 if (percent > 0.95) percent = 0.95;
+                 setState(() => _progressValue = percent);
+             }
+          }
+      );
+      
+      setState(() => _progressValue = 0.95); // İndirme bitti, işleme geçiliyor
 
       if (nFollowers.isNotEmpty || nFollowing.isNotEmpty) {
         if (!_adsHidden && !_justWatchedReward) {
@@ -1549,6 +1582,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         }
 
         await _processData(nFollowers, nFollowing);
+        setState(() => _progressValue = 1.0); // Bitti %100
 
         if (_justWatchedReward) setState(() => _justWatchedReward = false);
         if (mounted)
@@ -1588,12 +1622,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
       required String ua,
       required String type,
       required int totalExpected,
-      required Map<String, String> targetMap}) async {
+      required Map<String, String> targetMap,
+      Function(int count)? onProgress}) async { // onProgress eklendi
+      
     String endpoint = type == 'followers'
         ? 'friendships/$userId/followers'
         : 'friendships/$userId/following';
     String? nextMaxId;
     bool hasNext = true;
+    int currentCount = 0;
 
     while (hasNext) {
       String url = "https://i.instagram.com/api/v1/$endpoint/?count=50";
@@ -1610,7 +1647,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         for (var u in data['users']) {
           targetMap[u['username'].toString()] =
               u['profile_pic_url'].toString();
+          currentCount++;
         }
+        
+        if (onProgress != null) onProgress(currentCount); // İlerleme bildir
+
         nextMaxId = data['next_max_id'];
         hasNext = nextMaxId != null && nextMaxId.isNotEmpty;
 
@@ -1677,15 +1718,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
 
     nFollowers.forEach((user, img) {
-      // DÜZELTME: "isFirstRun" kontrolünü kaldırdık. 
-      // Artık Takipçiler listesinde, diğer kutularda olduğu gibi 
-      // yeni veya sıfırlanmış veri varsa "YENİ" etiketi görünecek.
       if (!oldFollowers.containsKey(user)) {
-        // Her durumda ana liste için 'new' setine ekle
         newItemsMap['followers']!.add(user);
 
-        // Ancak "Yeni Takipçiler" (New Followers) kutusunu
-        // ilk kurulumda doldurmamak için oradaki şartı koruyoruz
         if (!isFirstRun) {
            newFollowers[user] = img;
            badges['new_followers'] = (badges['new_followers'] ?? 0) + 1;
@@ -1693,7 +1728,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         }
       }
     });
-    // Rozet sayısı artık doğrudan set'in uzunluğu
     badges['followers'] = newItemsMap['followers']!.length;
 
     nFollowing.forEach((user, img) {
@@ -1771,14 +1805,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
           borderRadius: BorderRadius.circular(15),
           border: Border.all(color: color.withOpacity(0.1))),
       child: Row(children: [
-        Icon(icon, color: color, size: 20), // DÜZELTME: İkon rengi netleştirildi
+        Icon(icon, color: color, size: 20), 
         const SizedBox(width: 10),
         Expanded(
             child: Text(text,
                 style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    // DÜZELTME: Karanlık modda beyaz, açık modda kendi rengi
                     color: isDarkMode ? Colors.white : color)))
       ]),
     );
@@ -1796,7 +1829,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
-                // DÜZELTME: Karanlık modda beyaz, aydınlık modda siyah
                 color: isDarkMode ? Colors.white : Colors.black87)));
   }
 
@@ -1897,7 +1929,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         const Divider(height: 30),
       ])),
       actions: [
-        // DÜZELTME: İkon kaldırıldı, Sol/Sağ düzeni yapıldı
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -1909,7 +1940,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   _lang == 'tr' ? "Gizlilik Politikası" : "Privacy Policy",
                   style: TextStyle(
                       color: isDarkMode ? Colors.white70 : Colors.blueGrey,
-                      fontSize: 11, // Biraz küçülttük ki sığsın
+                      fontSize: 11, 
                       fontWeight: FontWeight.bold),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -1921,7 +1952,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: isInitial
                   ? ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 8), // Padding azaltıldı
+                        padding: const EdgeInsets.symmetric(horizontal: 8), 
                       ),
                       onPressed: () {
                         prefs?.setBool('is_terms_accepted', true);
@@ -1930,7 +1961,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       child: Text(
                         _t('read_and_agree'),
                         textAlign: TextAlign.center,
-                        style: const TextStyle(fontSize: 11), // Yazı biraz küçüldü
+                        style: const TextStyle(fontSize: 11), 
                       ))
                   : TextButton(
                       onPressed: () => Navigator.pop(context),
@@ -1949,7 +1980,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Text(_t(titleKey),
               style: TextStyle(
                   fontWeight: FontWeight.bold,
-                  // DÜZELTME: Karanlık modda başlık beyaz
                   color: isDarkMode ? Colors.white : Colors.blueAccent,
                   fontSize: 13)),
           const SizedBox(height: 4),
@@ -1957,7 +1987,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               style: TextStyle(
                   fontSize: 11,
                   height: 1.5,
-                  // DÜZELTME: Karanlık modda metin okunabilir gri/beyaz
                   color: isDarkMode ? Colors.white70 : Colors.black87))
         ]));
   }
@@ -1998,7 +2027,6 @@ class DetailListPage extends StatelessWidget {
             : ListView.builder(
                 itemCount: names.length,
                 itemBuilder: (ctx, i) {
-                  // DÜZELTME: Set içinde arama yapılırken garanti kontrol
                   bool isNew = newItems.contains(names[i]);
                   return ListTile(
                     onTap: () async {
