@@ -508,7 +508,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       'pin_accepted': 'PIN kabul edildi, süre sıfırlandı ✅',
       'pin_incorrect': 'Yanlış PIN',
       'ok': 'TAMAM',
-     'legal_intro':
+      'legal_intro':
           'Bu uygulamayı indiren ve kullanan her Kullanıcı, aşağıdaki "Kullanım Koşulları ve Feragatname" metnini okumuş, anlamış ve hükümlerini kabul etmiş sayılır:',
       'article1_title': 'Madde 1: Veri Gizliliği ve Yerel İşleme Mimarisi',
       'article1_text':
@@ -574,7 +574,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       'pin_accepted': 'PIN accepted, timer reset ✅',
       'pin_incorrect': 'Invalid PIN',
       'ok': 'OK',
-     'legal_intro':
+      'legal_intro':
           'By downloading and using this application, every User is deemed to have read, understood, and irrevocably accepted the "Terms of Use and Disclaimer" text below in advance:',
       'article1_title': 'Article 1: Data Privacy and Local Processing Architecture',
       'article1_text':
@@ -1172,18 +1172,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   child: AdWidget(ad: _bannerAd!));
                             }),
                           )
-                        else
+                        else if (_bannerAdError != null)
                           Padding(
                             padding: const EdgeInsets.symmetric(vertical: 8.0),
                             child: Text(
-                                _bannerAdError != null
-                                    ? 'Ad error: $_bannerAdError'
-                                    : "Analiz Bekleniyor...",
+                                'Ad Error: $_bannerAdError',
                                 style: TextStyle(
-                                    color: primaryColor.withOpacity(0.4),
+                                    color: Colors.redAccent,
                                     fontWeight: FontWeight.bold,
                                     fontSize: 10)),
                           )
+                        // "Analiz Bekleniyor..." yazan else bloğu tamamen kaldırıldı.
                       ]),
                     ),
                   ],
@@ -1902,26 +1901,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            TextButton(
-              onPressed: _launchPrivacyPolicyURL,
-              child: Text(
-                _lang == 'tr' ? "Gizlilik Politikası" : "Privacy Policy",
-                style: TextStyle(
-                    color: isDarkMode ? Colors.white70 : Colors.blueGrey,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold),
+            Flexible(
+              flex: 2,
+              child: TextButton(
+                onPressed: _launchPrivacyPolicyURL,
+                child: Text(
+                  _lang == 'tr' ? "Gizlilik Politikası" : "Privacy Policy",
+                  style: TextStyle(
+                      color: isDarkMode ? Colors.white70 : Colors.blueGrey,
+                      fontSize: 11, // Biraz küçülttük ki sığsın
+                      fontWeight: FontWeight.bold),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ),
-            isInitial
-                ? ElevatedButton(
-                    onPressed: () {
-                      prefs?.setBool('is_terms_accepted', true);
-                      Navigator.pop(context);
-                    },
-                    child: Text(_t('read_and_agree')))
-                : TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: Text(_lang == 'tr' ? "KAPAT" : "CLOSE"))
+            const SizedBox(width: 4),
+            Flexible(
+              flex: 3,
+              child: isInitial
+                  ? ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 8), // Padding azaltıldı
+                      ),
+                      onPressed: () {
+                        prefs?.setBool('is_terms_accepted', true);
+                        Navigator.pop(context);
+                      },
+                      child: Text(
+                        _t('read_and_agree'),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 11), // Yazı biraz küçüldü
+                      ))
+                  : TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: Text(_lang == 'tr' ? "KAPAT" : "CLOSE")),
+            )
           ],
         )
       ],
