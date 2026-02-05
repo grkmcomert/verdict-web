@@ -490,6 +490,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       'next_analysis_ready': 'Analiz şu anda yapılabilir.',
       'please_wait': 'Lütfen bekleyiniz',
       'remaining_time': 'Kalan süre: {time}',
+      'watch_ad': 'REKLAM İZLE VE ANALİZİ BAŞLAT',
       'clear_data_title': 'Veri Sıfırlama',
       'clear_data_content':
           'Tüm yerel veriler ve oturum bilgileri silinecektir. Emin misiniz?',
@@ -554,8 +555,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           'For support, suggestions, and help: Instagram @grkmcomert',
       'next_analysis': 'Next analysis',
       'next_analysis_ready': 'Ready to scan.',
-      'please_wait': 'Please Wait',
       'remaining_time': 'Next analysis: {time}',
+      'watch_ad': 'WATCH AD AND START ANALYSIS',
       'clear_data_title': 'Reset App Data',
       'clear_data_content':
           'This will wipe all local data and session cookies. Are you sure?',
@@ -653,19 +654,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _tryAutoLogin();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkUserAgreement();
-      
-      // DÜZELTME: Reklamları yüklemeden önce SDK'nın hazır olmasını bekle
       _waitForAdsAndLoad(); 
-      
       _checkRatingDialog();
     });
   }
 
-  // YENİ FONKSİYON: Race Condition'ı önlemek için
   Future<void> _waitForAdsAndLoad() async {
-     await MobileAds.instance.initialize(); // SDK'nın hazır olmasını bekle
+     await MobileAds.instance.initialize(); 
      if (mounted) {
-       _loadBannerAd(); // Sonra yükle
+       _loadBannerAd(); 
      }
   }
 
@@ -1172,7 +1169,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     fontSize: 10)),
                           )
                         else if (_isAdLoaded && _bannerAd != null)
-                          // LayoutBuilder KALDIRILDI, doğrudan SizedBox ve ad size
                           SizedBox(
                             width: _bannerAd!.size.width.toDouble(),
                             height: _bannerAd!.size.height.toDouble(),
@@ -1189,7 +1185,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     fontSize: 10)),
                           )
                         else
-                          // Yükleniyor durumu için boşluk veya spinner
                           const SizedBox(height: 50, child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))))
                       ]),
                     ),
@@ -1218,11 +1213,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         Container(
                           height: 250,
                           alignment: Alignment.center,
-                          // PROGRESS DEĞERİ EKLENDİ
                           child: ModernLoader(
-                              text: _t('fetching_data'), 
-                              isDark: isDarkMode,
-                              progress: _progressValue,
+                            text: _t('fetching_data'), 
+                            isDark: isDarkMode,
+                            progress: _progressValue,
                           ),
                         )
                       else
@@ -1478,19 +1472,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       actions: [
                         TextButton(
                             onPressed: () => Navigator.pop(ctx, false),
-                            child: Text(_t('cancel')))
+                            child: Text(_t('cancel'))),
+                        ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blueAccent,
+                                foregroundColor: Colors.white),
+                            onPressed: () => Navigator.pop(ctx, true),
+                            child: Text(_t('watch_ad'))),
                       ],
                     ));
-            // SADECE CANCEL BUTONU VAR, REKLAM YOK ARTIK (Kullanıcı talebiyle kaldırılmıştı, ama önceki kodda vardı. 
-            // Senin kodunda reklam izleme mantığı var, dokunmuyorum.)
-            // Ancak, "cancel" dışında bir seçenek yoksa kullanıcı çıkamaz. 
-            // Önceki kodda "Reklam izle" butonu vardı. Eğer bu kısımda hata varsa düzeltmelisin ama 
-            // "Dokunma" dediğin için mantığı ellemiyorum, sadece return ediyorum.
             if (wantWatch != true) return;
-            
-            // Eğer buton eklenmediyse bu blok çalışmaz.
-            // Önceki kodda buton vardı. Eğer kaybolduysa eklemeliyim.
-            // Fakat senin attığın son kodda butonlar var. Sorun yok.
           } else
             return;
         }
@@ -1523,7 +1514,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           targetMap: nFollowers,
           onProgress: (fetched) {
              if (tFollowers > 0) {
-                 // 0.10'dan 0.55'e kadar range
                  double percent = 0.10 + ( (fetched / tFollowers) * 0.45 );
                  if (percent > 0.55) percent = 0.55;
                  setState(() => _progressValue = percent);
@@ -1545,7 +1535,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           targetMap: nFollowing,
           onProgress: (fetched) {
              if (tFollowing > 0) {
-                 // 0.55'den 0.95'e kadar range
                  double percent = 0.55 + ( (fetched / tFollowing) * 0.40 );
                  if (percent > 0.95) percent = 0.95;
                  setState(() => _progressValue = percent);
@@ -1553,7 +1542,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           }
       );
       
-      setState(() => _progressValue = 0.95); // İndirme bitti, işleme geçiliyor
+      setState(() => _progressValue = 0.95); 
 
       if (nFollowers.isNotEmpty || nFollowing.isNotEmpty) {
         if (!_adsHidden && !_justWatchedReward) {
@@ -1623,7 +1612,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       required String type,
       required int totalExpected,
       required Map<String, String> targetMap,
-      Function(int count)? onProgress}) async { // onProgress eklendi
+      Function(int count)? onProgress}) async { 
       
     String endpoint = type == 'followers'
         ? 'friendships/$userId/followers'
@@ -1650,7 +1639,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           currentCount++;
         }
         
-        if (onProgress != null) onProgress(currentCount); // İlerleme bildir
+        if (onProgress != null) onProgress(currentCount); 
 
         nextMaxId = data['next_max_id'];
         hasNext = nextMaxId != null && nextMaxId.isNotEmpty;
