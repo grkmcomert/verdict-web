@@ -1481,7 +1481,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             child: Text(_t('watch_ad'))),
                       ],
                     ));
-            if (wantWatch != true) return;
+            
+            if (wantWatch == true) {
+               // REKLAM BURADA TETİKLENİR
+               final adResult = await _showRewardedAdWithResult();
+               // EĞER REKLAM BAŞARISIZSA VEYA KAPATILDIYSA ANALİZİ BAŞLATMA
+               if (adResult["status"] == false) return; 
+            } else {
+               return; 
+            }
           } else
             return;
         }
