@@ -555,6 +555,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           'For support, suggestions, and help: Instagram @grkmcomert',
       'next_analysis': 'Next analysis',
       'next_analysis_ready': 'Ready to scan.',
+      'please_wait': 'Please wait',
       'remaining_time': 'Next analysis: {time}',
       'watch_ad': 'WATCH AD AND START ANALYSIS',
       'clear_data_title': 'Reset App Data',
@@ -1486,7 +1487,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                // REKLAM BURADA TETİKLENİR
                final adResult = await _showRewardedAdWithResult();
                // EĞER REKLAM BAŞARISIZSA VEYA KAPATILDIYSA ANALİZİ BAŞLATMA
-               if (adResult["status"] == false) return; 
+               if (adResult["status"] == false) {
+                 if (mounted) {
+                   String errorMsg = _lang == 'tr'
+                       ? "Reklam açılamadı: "
+                       : "Ad could not be shown: ";
+                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                     content: Text("$errorMsg ${adResult['error']}"),
+                     backgroundColor: Colors.red,
+                     duration: const Duration(seconds: 4),
+                   ));
+                 }
+                 return;
+               }
             } else {
                return; 
             }
