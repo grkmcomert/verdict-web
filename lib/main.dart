@@ -8,11 +8,13 @@ import 'package:http/http.dart' as http;
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:io';
-import 'dart:math' show min;
 import 'package:flutter/foundation.dart';
+import 'dart:math';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_remote_config/firebase_remote_config.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 // Bildirim ve Zamanlama Paketleri
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
@@ -23,10 +25,16 @@ import 'package:timezone/timezone.dart' as tz;
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();
 
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+}
+
 void main() {
   runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
     await Firebase.initializeApp();
+    FirebaseMessaging.onBackgroundMessage(
+        _firebaseMessagingBackgroundHandler);
     runApp(const RootApp());
   }, (error, stack) {
     debugPrint("Global Hata Yakalandı: $error");
@@ -44,6 +52,8 @@ class _RootAppState extends State<RootApp> {
   bool _isLoading = true;
   bool _showRealApp = false;
   bool _isAppEnabled = true;
+  bool _isUpdateRequired = false;
+  String _updateMessage = "";
   String _debugError = "";
 
   @override
@@ -74,6 +84,7 @@ class _RootAppState extends State<RootApp> {
 
     try {
       _initGoogleMobileAds();
+      _initFirebaseMessaging();
       _checkAppLaunchForRating();
       _scheduleDailyNotification();
     } catch (_) {}
@@ -102,6 +113,66 @@ class _RootAppState extends State<RootApp> {
     );
 
     await flutterLocalNotificationsPlugin.initialize(initializationSettings);
+
+    const AndroidNotificationChannel channel = AndroidNotificationChannel(
+      'fcm_default_channel',
+      'FCM Notifications',
+      description: 'Foreground FCM notifications',
+      importance: Importance.high,
+    );
+    await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(channel);
+  }
+
+  Future<void> _initFirebaseMessaging() async {
+    try {
+      final messaging = FirebaseMessaging.instance;
+      await messaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+
+      await messaging.setForegroundNotificationPresentationOptions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+
+      final token = await messaging.getToken();
+      if (token != null) {
+        debugPrint("FCM Token: $token");
+      }
+
+      messaging.onTokenRefresh.listen((t) {
+        debugPrint("FCM Token Refresh: $t");
+      });
+
+      FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
+        final notification = message.notification;
+        if (notification == null) return;
+
+        await flutterLocalNotificationsPlugin.show(
+          notification.hashCode,
+          notification.title,
+          notification.body,
+          const NotificationDetails(
+            android: AndroidNotificationDetails(
+              'fcm_default_channel',
+              'FCM Notifications',
+              channelDescription: 'Foreground FCM notifications',
+              importance: Importance.max,
+              priority: Priority.high,
+            ),
+            iOS: DarwinNotificationDetails(),
+          ),
+        );
+      });
+    } catch (e) {
+      debugPrint("FCM init error: $e");
+    }
   }
 
   Future<void> _scheduleDailyNotification() async {
@@ -213,10 +284,44 @@ class _RootAppState extends State<RootApp> {
       await remoteConfig.fetchAndActivate();
       _showRealApp = remoteConfig.getBool('show_real_app');
       _isAppEnabled = remoteConfig.getBool('app_enabled');
+      await _checkForcedUpdate(remoteConfig);
     } catch (e) {
       _showRealApp = false;
       _isAppEnabled = true;
       _debugError = "Config Error: $e";
+    }
+  }
+
+  Future<void> _checkForcedUpdate(FirebaseRemoteConfig remoteConfig) async {
+    try {
+      String requiredVersion =
+          remoteConfig.getString('currentappversion').trim();
+      if (requiredVersion.startsWith('v') || requiredVersion.startsWith('V')) {
+        requiredVersion = requiredVersion.substring(1).trim();
+      }
+      if (requiredVersion.isEmpty) {
+        _isUpdateRequired = false;
+        if (mounted) setState(() {});
+        return;
+      }
+      final info = await PackageInfo.fromPlatform();
+      final String currentVersion = info.version.trim();
+      final String currentFull =
+          '${info.version.trim()}+${info.buildNumber.trim()}';
+      final bool matches = requiredVersion == currentVersion ||
+          requiredVersion == currentFull;
+      _isUpdateRequired = !matches;
+      if (_isUpdateRequired) {
+        final String locale = Platform.localeName;
+        final bool isTr = locale.toLowerCase().startsWith('tr');
+        _updateMessage = isTr
+            ? 'Yeni güncelleme mevcut! Lütfen mağazayı kontrol edin.'
+            : 'A new update is available. Please check the store.';
+      }
+      if (mounted) setState(() {});
+    } catch (_) {
+      _isUpdateRequired = false;
+      if (mounted) setState(() {});
     }
   }
 
@@ -230,12 +335,106 @@ class _RootAppState extends State<RootApp> {
             body: ModernLoader(text: "VERDICT Başlatılıyor...")),
       );
     }
+    if (_isUpdateRequired) {
+      return UpdateRequiredApp(message: _updateMessage);
+    }
     if (!_isAppEnabled) return const MaintenanceApp();
     if (_showRealApp) {
       return const UnfollowersApp();
     } else {
       return SafeModeApp(debugError: _debugError);
     }
+  }
+}
+
+class UpdateRequiredApp extends StatelessWidget {
+  final String message;
+  const UpdateRequiredApp({super.key, required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    final String bodyText = message.isNotEmpty
+        ? message
+        : "İyi haber! Güncelleme mevcut. Mağazamızı kontrol edip yeni sürümü indir!";
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        backgroundColor: const Color(0xFFF4F7F9),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: double.infinity,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 22, vertical: 26),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(22),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.blueGrey.withOpacity(0.15),
+                        blurRadius: 18,
+                        offset: const Offset(0, 10),
+                      )
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEFF3F6),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Icon(Icons.system_update_alt,
+                            size: 42, color: Colors.blueGrey.shade700),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        "İyi haber! Güncelleme mevcut",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.blueGrey.shade900),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        bodyText,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            fontSize: 12, color: Colors.blueGrey.shade600),
+                      ),
+                      const SizedBox(height: 18),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () => SystemNavigator.pop(),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blueGrey.shade900,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          child: const Text("KAPAT",
+                              style: TextStyle(
+                                  fontWeight: FontWeight.w800, fontSize: 12)),
+                        ),
+                      )
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -374,27 +573,196 @@ class BioPlannerScreen extends StatefulWidget {
 
 class _BioPlannerScreenState extends State<BioPlannerScreen> {
   final TextEditingController _bioCtrl = TextEditingController();
-  final List<String> _aiTemplates = ["Creating my own sunshine. ☀️"];
+  final Random _rand = Random();
+  final List<String> _aiTemplates = [
+    "Collecting moments, not things.",
+    "Proof that small steps still move you forward.",
+    "Soft light, loud dreams.",
+    "Catching the in‑between.",
+    "If you need me, I’m out chasing sunsets.",
+    "Less perfection, more authenticity.",
+    "Built on late nights and big ideas.",
+    "My favorite color is the feeling of calm.",
+    "Here for the journey, not the highlight reel.",
+    "Choose progress over pressure.",
+    "A little chaos, a lot of heart.",
+    "Quiet confidence looks good on me.",
+    "Making ordinary days feel cinematic.",
+    "This is your sign to start.",
+    "Woke up grateful, stayed focused.",
+    "Dreams don’t work unless we do.",
+    "Staying soft in a loud world.",
+    "Find your pace, then enjoy it.",
+    "Messy hair, clear goals.",
+    "Small wins add up."
+  ];
+
+  final List<String> _popularHashtags = [
+    "#photooftheday",
+    "#instagood",
+    "#aesthetic",
+    "#vibes",
+    "#explorepage",
+    "#dailyinspo",
+    "#mindset",
+    "#selfgrowth",
+    "#creative",
+    "#lifestyle",
+    "#minimalism",
+    "#goodenergy"
+  ];
 
   void _generateAiCaption() {
-    _bioCtrl.text = _aiTemplates[0];
+    _bioCtrl.text = _aiTemplates[_rand.nextInt(_aiTemplates.length)];
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("AI Caption & Tag Gen")),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            if (widget.debugError.isNotEmpty)
-              Text("Error: ${widget.debugError}",
-                  style: const TextStyle(color: Colors.red)),
-            TextField(controller: _bioCtrl, maxLength: 150),
-            ElevatedButton(
-                onPressed: _generateAiCaption, child: const Text("AI Generate"))
-          ],
+      appBar: AppBar(
+        title: const Text("Bio Planner"),
+        centerTitle: true,
+        elevation: 0,
+      ),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFFF6F7FB), Color(0xFFEFEFF7)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (widget.debugError.isNotEmpty)
+                Text("Error: ${widget.debugError}",
+                    style: const TextStyle(color: Colors.red)),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 18, vertical: 22),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.06),
+                      blurRadius: 16,
+                      offset: const Offset(0, 8),
+                    )
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "Caption Generator",
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      "Tap generate for a fresh caption in seconds.",
+                      style: TextStyle(fontSize: 12, color: Colors.black54),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: _bioCtrl,
+                      maxLength: 150,
+                      decoration: InputDecoration(
+                        hintText: "Your caption will appear here...",
+                        counterText: "",
+                        filled: true,
+                        fillColor: const Color(0xFFF7F7FA),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: _generateAiCaption,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF111827),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text(
+                          "Generate",
+                          style: TextStyle(
+                              fontWeight: FontWeight.w700, fontSize: 13),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.06),
+                      blurRadius: 16,
+                      offset: const Offset(0, 8),
+                    )
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "Popular Hashtags",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      "Updated every 24 hours",
+                      style: TextStyle(fontSize: 11, color: Colors.black54),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _popularHashtags
+                          .map((t) => Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF2F3F7),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  t,
+                                  style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600),
+                                ),
+                              ))
+                          .toList(),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -453,23 +821,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String currentUsername = "";
   String? savedCookie, savedUserId, savedUserAgent;
 
-  DateTime? _lastUpdateTimeNetwork;
   Duration? _remainingToNextAnalysis;
   Timer? _countdownTimer;
   Timer? _legalHoldTimer;
+  Timer? _consentWatchTimer;
+  int _consentWatchTries = 0;
 
   String _lang = 'tr';
 
   BannerAd? _bannerAd;
   bool _isAdLoaded = false;
   String? _bannerAdError;
-  String? _currentAdUnit;
   bool _adsHidden = false;
 
   bool _justWatchedReward = false;
   bool _isRewardedLoading = false;
+  bool _isBanned = false;
 
   static const bool _forceTestAds = false;
+
+  Set<String> _bannedUsers = {};
+  Set<String> _removeAdsUsers = {};
 
   final Map<String, Map<String, String>> _localized = {
     'tr': {
@@ -655,6 +1027,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _loadStoredData();
     _loadLanguagePreference();
     _tryAutoLogin();
+    _loadRemoteUserFlags();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkUserAgreement();
       _checkRatingDialog();
@@ -662,22 +1035,79 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
 
+  Set<String> _parseUserList(String raw) {
+    return raw
+        .split(RegExp(r'[,\n;]'))
+        .map((e) => e.trim().toLowerCase())
+        .where((e) => e.isNotEmpty)
+        .toSet();
+  }
+
+  Future<void> _loadRemoteUserFlags() async {
+    try {
+      final remoteConfig = FirebaseRemoteConfig.instance;
+      await remoteConfig.setConfigSettings(RemoteConfigSettings(
+        fetchTimeout: const Duration(seconds: 15),
+        minimumFetchInterval: Duration.zero,
+      ));
+      await remoteConfig.fetchAndActivate();
+      final String bannedRaw =
+          remoteConfig.getString('bannedusers').trim();
+      final String removeAdsRaw =
+          remoteConfig.getString('removeadsfor').trim();
+      _bannedUsers = _parseUserList(bannedRaw);
+      _removeAdsUsers = _parseUserList(removeAdsRaw);
+      _applyUserFlags();
+    } catch (_) {}
+  }
+
+  void _applyUserFlags() {
+    if (!isLoggedIn) return;
+    final String username = currentUsername.trim().toLowerCase();
+    final bool banned = _bannedUsers.contains(username);
+    final bool removeAds = _removeAdsUsers.contains(username);
+    _isBanned = banned;
+    if (banned || removeAds) {
+      _disableAdsForUser();
+    }
+    if (mounted) setState(() {});
+  }
+
+  void _disableAdsForUser() {
+    try {
+      _bannerAd?.dispose();
+    } catch (_) {}
+    _bannerAd = null;
+    _isAdLoaded = false;
+    _bannerAdError = null;
+    _adsHidden = true;
+  }
+
   Future<void> _maybeLoadBannerAfterConsent() async {
-    for (int i = 0; i < 10; i++) {
-      if (!mounted) return;
+    _consentWatchTimer?.cancel();
+    _consentWatchTries = 0;
+    _consentWatchTimer = Timer.periodic(const Duration(seconds: 1), (t) async {
+      if (!mounted) {
+        t.cancel();
+        return;
+      }
+      _consentWatchTries++;
+      if (_consentWatchTries > 60) {
+        t.cancel();
+        return;
+      }
       try {
         if (await ConsentInformation.instance.canRequestAds()) {
           _loadBannerAd();
-          return;
+          t.cancel();
         }
       } catch (_) {}
-      await Future.delayed(const Duration(milliseconds: 500));
-    }
+    });
   }
 
-  bool _shouldUseNonPersonalizedAds() {
+  Future<bool> _shouldUseNonPersonalizedAds() async {
     try {
-      final status = ConsentInformation.instance.getConsentStatus();
+      final status = await ConsentInformation.instance.getConsentStatus();
       return status != ConsentStatus.obtained &&
           status != ConsentStatus.notRequired;
     } catch (_) {
@@ -758,8 +1188,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ? 'ca-app-pub-4966303174577377/1748084831'
             : 'ca-app-pub-4966303174577377/3471529345');
 
-    _currentAdUnit = adUnit;
-
     if (_bannerAd != null) {
       try {
         _bannerAd!.dispose();
@@ -780,7 +1208,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (kDebugMode) print('Adaptive size error: $e');
     }
 
-    final bool useNpa = _shouldUseNonPersonalizedAds();
+    final bool useNpa = await _shouldUseNonPersonalizedAds();
     _bannerAd = BannerAd(
       adUnitId: adUnit,
       request: AdRequest(nonPersonalizedAds: useNpa),
@@ -814,6 +1242,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<Map<String, dynamic>> _showRewardedAdWithResult() async {
+    if (_adsHidden) return {"status": true, "skipped": true};
     if (_isRewardedLoading) return {"status": false, "error": "Loading..."};
     setState(() {
       _isRewardedLoading = true;
@@ -833,7 +1262,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     RewardedAd? tempAd;
 
-    final bool useNpa = _shouldUseNonPersonalizedAds();
+    final bool useNpa = await _shouldUseNonPersonalizedAds();
     RewardedAd.load(
       adUnitId: adUnit,
       request: AdRequest(nonPersonalizedAds: useNpa),
@@ -909,7 +1338,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (lastMs == null) {
       if (mounted)
         setState(() {
-          _lastUpdateTimeNetwork = null;
           _remainingToNextAnalysis = null;
         });
       return;
@@ -922,15 +1350,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (remaining <= Duration.zero) {
         if (mounted)
           setState(() {
-            _lastUpdateTimeNetwork = last;
-            _remainingToNextAnalysis = null;
-          });
-        return;
-      }
+          _remainingToNextAnalysis = null;
+        });
+      return;
+    }
 
       if (mounted)
         setState(() {
-          _lastUpdateTimeNetwork = last;
           _remainingToNextAnalysis = remaining;
         });
 
@@ -949,7 +1375,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } catch (_) {
       if (mounted)
         setState(() {
-          _lastUpdateTimeNetwork = last;
           _remainingToNextAnalysis = null;
         });
     }
@@ -1053,6 +1478,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               username ?? (_lang == 'tr' ? "Kullanıcı" : "User");
           savedUserAgent = ua;
           _loadStoredData();
+          _applyUserFlags();
         });
     }
   }
@@ -1088,30 +1514,135 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
   
   Future<void> _launchPrivacyPolicyURL() async {
-    final Uri url = Uri.parse('https://sites.google.com/view/verdict-privacy/'); 
+    final Uri url = Uri.parse('https://raw.githubusercontent.com/grkmcomert/verdict-web/refs/heads/main/privacy-policy.txt');
     if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
        debugPrint("Link açılamadı");
     }
   }
 
   Future<void> _revokeConsentAndShowForm() async {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(_lang == 'tr'
+            ? 'Rıza formu açılıyor...'
+            : 'Opening consent form...'),
+        duration: const Duration(seconds: 2),
+      ));
+    }
     try {
       await ConsentInformation.instance.reset();
     } catch (_) {}
     final params = ConsentRequestParameters();
+    final Completer<void> c = Completer<void>();
     ConsentInformation.instance.requestConsentInfoUpdate(
       params,
       () async {
         if (await ConsentInformation.instance.isConsentFormAvailable()) {
-          ConsentForm.loadAndShowConsentFormIfRequired((FormError? _) {});
+          ConsentForm.loadAndShowConsentFormIfRequired((FormError? _) {
+            if (!c.isCompleted) c.complete();
+          });
+        } else {
+          if (!c.isCompleted) c.complete();
         }
       },
-      (FormError _) {},
+      (FormError _) {
+        if (!c.isCompleted) c.complete();
+      },
     );
+    try {
+      await c.future;
+    } catch (_) {}
+    _reloadBannerForConsentChange();
+    if (!mounted) return;
+    bool ok = false;
+    try {
+      await ConsentInformation.instance.getConsentStatus();
+      ok = true;
+    } catch (_) {
+      ok = false;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(ok
+          ? (_lang == 'tr'
+              ? 'Rıza tercihiniz güncellendi.'
+              : 'Your consent preference was updated.')
+          : (_lang == 'tr'
+              ? 'Rıza güncellenemedi. Lütfen tekrar deneyin.'
+              : 'Consent update failed. Please try again.')),
+      backgroundColor: ok ? Colors.green : Colors.red,
+      duration: const Duration(seconds: 3),
+    ));
+  }
+
+  Future<void> _reloadBannerForConsentChange() async {
+    try {
+      if (_bannerAd != null) {
+        _bannerAd!.dispose();
+      }
+    } catch (_) {}
+    _bannerAd = null;
+    _isAdLoaded = false;
+    _bannerAdError = null;
+    if (mounted) {
+      setState(() {});
+    }
+    _maybeLoadBannerAfterConsent();
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isBanned) {
+      return Scaffold(
+        backgroundColor:
+            isDarkMode ? const Color(0xFF000000) : const Color(0xFFF4F7F9),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.block, size: 72, color: Colors.redAccent.shade200),
+                const SizedBox(height: 16),
+                Text(
+                  _lang == 'tr'
+                      ? 'Hesabınız engellendi'
+                      : 'Your account is blocked',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                      color: isDarkMode ? Colors.white : Colors.black87),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _lang == 'tr'
+                      ? 'Bu hesap için erişim kısıtlandı.'
+                      : 'Access is restricted for this account.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: isDarkMode ? Colors.white70 : Colors.blueGrey),
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () => SystemNavigator.pop(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blueGrey.shade900,
+                    foregroundColor: Colors.white,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: Text(_lang == 'tr' ? 'KAPAT' : 'CLOSE'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     Color bgColor =
         isDarkMode ? const Color(0xFF000000) : const Color(0xFFF4F7F9);
     Color cardColor = isDarkMode ? const Color(0xFF121212) : Colors.white;
@@ -1722,6 +2253,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         currentUsername = result['username'];
         savedUserAgent = result['user_agent'];
       });
+      _applyUserFlags();
+      if (_isBanned) {
+        return;
+      }
       _refreshData();
     }
   }
@@ -1894,6 +2429,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void dispose() {
     _cancelCountdown();
     _cancelLegalHoldTimer();
+    _consentWatchTimer?.cancel();
     _bannerAd?.dispose();
     super.dispose();
   }
