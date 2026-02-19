@@ -1,5 +1,3 @@
-English:
-
 PRIVACY POLICY FOR VERDICT
 This Privacy Policy explains how VERDICT ("we," "us," or "our"), developed by Görkem Ali Cömert, collects, uses, and discloses information about you when you use our mobile application (the "App"). By accessing or using the App, you agree to this Privacy Policy. If you do not agree with our policies and practices, your choice is not to use our App.
 
@@ -50,63 +48,5 @@ If you have any questions or suggestions, do not hesitate to contact us.
 
 Developer: Görkem Ali Cömert
 Contact: via Instagram @grkmcomert
-
-
-
----------------------------------------------------------------------------------------------------------
-
-
-
-
-Turkish:
-
-VERDICT GİZLİLİK POLİTİKASI
-Bu Gizlilik Politikası, Görkem Ali Cömert tarafından geliştirilen VERDICT ("biz", "bize" veya "bizim") mobil uygulamasını kullandığınızda bilgilerinizin nasıl toplandığını açıklar. Uygulamaya erişerek veya kullanarak, bu Gizlilik Politikasını kabul etmiş olursunuz.
-
-1. Bağımsızlık Bildirimi ve Yasal Uyarı
-VERDICT, bağımsız bir üçüncü taraf uygulamasıdır ve Instagram, Facebook veya Meta Platforms, Inc. ile bağlantılı değildir. "Instagram", Meta Platforms, Inc. şirketinin ticari markasıdır. Biz, Instagram platformunu yalnızca bir kullanıcı olarak erişebildiğiniz veriler üzerinden analiz sağlamak amacıyla kullanmaktayız.
-
-2. Topladığımız Bilgiler
-Kati bir "Cihaz Üzerinde İşlem" (On-Device Processing) prensibiyle çalışıyoruz. Kişisel sosyal medya kimlik bilgilerinizi toplamak veya saklamak için bir sunucu işletmiyoruz.
-A. Kişisel Veriler (Kimlik Doğrulama): Takipçi analizi yapmak için Instagram hesabınıza giriş yapmanız gerekmektedir.
-Nasıl çalışır: Uygulama, sizi Instagram'ın resmi giriş sayfasına yönlendirmek için güvenli bir WebView kullanır.
-Erişimimiz: Şifrenizi GÖRMÜYORUZ, SAKLAMIYORUZ veya İLETMİYORUZ. Oturum çerezleriniz ve anahtarlarınız yalnızca cihazınızın yerel güvenli depolama alanında saklanır.
-Sunucu Depolaması: Giriş bilgilerinizi veya listelerinizi bize ait herhangi bir harici sunucuya YÜKLEMİYORUZ.
-B. Kullanım ve Cihaz Bilgileri: Google AdMob ve Firebase, uygulama performansını artırmak ve reklam sunmak amacıyla şu bilgileri toplayabilir:
-Cihaz modeli ve üreticisi
-İşletim sistemi sürümü
-Ağ türü (WiFi/Hücresel)
-Reklam Kimliği (Android için AAID / iOS için IDFA)
-Çökme günlükleri ve performans verileri
-
-3. Bilgilerinizi Nasıl Kullanıyoruz
-Hizmet Sağlamak İçin: Takipten çıkanları ve yeni takipçileri belirlemek amacıyla listeleri cihazınızda yerel olarak karşılaştırmak için.
-Uygulamayı Sürdürmek İçin: Güncellemeleri ve özellik geçişlerini yönetmek amacıyla Firebase Remote Config kullanmak için.
-Reklam Sunmak İçin: Uygulamanın ücretsiz kalmasına yardımcı olan Google AdMob aracılığıyla reklam göstermek için.
-
-4. Üçüncü Taraf Hizmetleri ve Veri Paylaşımı
-Kişisel verilerinizi satmıyoruz. Ancak, üçüncü taraf hizmet sağlayıcılarının politikalarını incelemenizi öneririz:
-Google AdMob: Gizlilik Politikası
-Google Firebase: Gizlilik Politikası
-
-5. Veri Saklama ve Silme
-Yerel Veriler: Veriler yerel olarak cihazınızda saklandığı için tam kontrol sizdedir.
-Silme: Verileri şu yollarla silebilirsiniz:
-Uygulama ayarlarından çıkış yaparak.
-Telefon ayarlarından Uygulamanın verilerini temizleyerek.
-Uygulamayı kaldırarak. Uygulama kaldırıldığında bizde verilerinize ait hiçbir iz kalmaz.
-
-6. Güvenlik
-Kişisel Bilgilerinizi korumak için ticari olarak kabul edilebilir yöntemleri kullanmaya gayret ediyoruz. Ancak, internet üzerinden hiçbir iletim yönteminin %100 güvenli olmadığını unutmayın.
-
-7. Çocukların Gizliliği
-Hizmetlerimiz 13 yaşın altındaki kimselere hitap etmemektedir. 13 yaşın altındaki çocuklardan bilerek bilgi toplamıyoruz.
-
-8. Bu Gizlilik Politikasındaki Değişiklikler
-Gizlilik Politikamızı zaman zaman güncelleyebiliriz. Yeni Gizlilik Politikasını bu sayfada yayınlayarak sizi haberdar edeceğiz. Bu değişiklikler yayınlandığı an geçerli olur.
-
-9. İletişim
-Gizlilik Politikamızla ilgili sorularınız için bizimle iletişime geçin:
-
 Geliştirici: Görkem Ali Cömert
 İletişim: Instagram üzerinden @grkmcomert
